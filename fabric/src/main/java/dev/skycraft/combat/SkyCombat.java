@@ -3,12 +3,14 @@ package dev.skycraft.combat;
 import dev.skycraft.SkyCraft;
 import dev.skycraft.link.Proto;
 import dev.skycraft.link.SkyLink;
+import dev.skycraft.net.SkyNet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -82,16 +84,89 @@ public final class SkyCombat {
 		}
 		if (SkyLink.readActors(ACTORS)) {
 			sync(level);
+			shareActors(players, level);
 		}
 		// Hits land during the tick (melee, sweeps, arrows, fire); send one combined hit per actor.
 		for (SkyrimActorEntity proxy : PROXIES.values()) {
 			float[] hit = proxy.takeHit();
+			ServerPlayer attacker = proxy.takeAttacker();
 			if (hit != null && (hit[0] > 0.0F || hit[3] > 0.0F)) {
-				SkyLink.pushEvent(
-					Proto.EV_HIT_ACTOR, proxy.formId(), hit[0], hit[1], hit[2], hit[3], Float.floatToRawIntBits(hit[4]), Float.floatToRawIntBits(hit[5])
-				);
+				int flags = Float.floatToRawIntBits(hit[4]);
+				int weapon = Float.floatToRawIntBits(hit[5]);
+				// The host's Skyrim takes every hit; a guest's hit doesn't train the host's skills.
+				boolean byGuest = attacker != null && !SkyNet.isHost(attacker);
+				SkyLink.pushEvent(Proto.EV_HIT_ACTOR, proxy.formId(), hit[0], hit[1], hit[2], hit[3], byGuest ? flags | Proto.HIT_REMOTE : flags, weapon);
+				shareHit(players, proxy, hit, flags, weapon, attacker);
 				SkyCraft.LOG.info("SkyCraft: hit {} for {} (knockback {})", proxy.getName().getString(), hit[0], hit[3]);
 			}
+		}
+	}
+
+	// ---- multiplayer: the host's actors are everyone's actors ---------------------------------
+	// Each guest's Skyrim has its own copy of every placed actor (same form id). The host's Skyrim
+	// decides where they are and takes the hits; guests are told both, and their Skyrim follows.
+
+	/** Guests this close to an actor (blocks) are told where it is and when it's hit. */
+	private static final double SHARE_RANGE = 72.0;
+	private static int shareTick;
+	private static final SkyLink.SkyState HOST_SKY = new SkyLink.SkyState();
+
+	/**
+	 * Actors Skyrim made up while playing (random encounters, summons: form ids FFxxxxxx) are
+	 * numbered separately in each player's Skyrim, so those can't be matched up.
+	 */
+	private static boolean sharedActor(int formId) {
+		return formId != 0 && (formId >>> 24) != 0xFF;
+	}
+
+	private static boolean guest(ServerPlayer player, ServerLevel level) {
+		return player.level() == level && !SkyNet.isHost(player);
+	}
+
+	/** Tells each guest where the host's Skyrim has the actors around them (every other tick). */
+	private static void shareActors(List<ServerPlayer> players, ServerLevel level) {
+		if (players.size() < 2 || (++shareTick & 1) != 0 || !SkyLink.readSkyState(HOST_SKY)) {
+			return;
+		}
+		for (ServerPlayer player : players) {
+			if (!guest(player, level) || !ServerPlayNetworking.canSend(player, SkyNet.ActorSync.TYPE)) {
+				continue;
+			}
+			List<Integer> formIds = new ArrayList<>();
+			List<Integer> flags = new ArrayList<>();
+			List<Float> where = new ArrayList<>();
+			for (SkyLink.Actor a : ACTORS) {
+				double dx = a.x() - player.getX(), dy = a.y() - player.getY(), dz = a.z() - player.getZ();
+				if (!sharedActor(a.formId()) || dx * dx + dy * dy + dz * dz > SHARE_RANGE * SHARE_RANGE) {
+					continue;
+				}
+				formIds.add(a.formId());
+				flags.add(a.flags());
+				where.add(a.x());
+				where.add(a.y());
+				where.add(a.z());
+				where.add(a.yaw());
+				if (formIds.size() >= SkyNet.ActorSync.MAX_ACTORS) {
+					break;
+				}
+			}
+			if (!formIds.isEmpty()) {
+				ServerPlayNetworking.send(player, new SkyNet.ActorSync(HOST_SKY.worldId, formIds, flags, where));
+			}
+		}
+	}
+
+	/** A hit on one of the host's actors also lands on each nearby guest's copy of it. */
+	private static void shareHit(List<ServerPlayer> players, SkyrimActorEntity proxy, float[] hit, int flags, int weapon, @Nullable ServerPlayer attacker) {
+		if (players.size() < 2 || !sharedActor(proxy.formId()) || !(proxy.level() instanceof ServerLevel level)) {
+			return;
+		}
+		for (ServerPlayer player : players) {
+			if (!guest(player, level) || player.distanceToSqr(proxy) > SHARE_RANGE * SHARE_RANGE || !ServerPlayNetworking.canSend(player, SkyNet.ActorHit.TYPE)) {
+				continue;
+			}
+			int theirs = player == attacker ? flags : flags | Proto.HIT_REMOTE;
+			ServerPlayNetworking.send(player, new SkyNet.ActorHit(proxy.formId(), hit[0], hit[1], hit[2], hit[3], (theirs & 0xFFFF) | (weapon & 0xFFFF) << 16));
 		}
 	}
 

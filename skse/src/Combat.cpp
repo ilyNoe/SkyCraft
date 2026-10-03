@@ -332,6 +332,10 @@ namespace skycraft
 			const float damage = a_ev.a * scale;
 			const bool  crit = (a_ev.flags & proto::kHitCritical) != 0;
 			const bool  projectile = (a_ev.flags & proto::kHitProjectile) != 0;
+			// Multiplayer: another player's hit. It hurts our copy of the actor all the same, but it
+			// isn't this player's doing: no skill gain, and hitting a bystander is no crime of ours.
+			const bool remote = (a_ev.flags & proto::kHitRemote) != 0;
+			const bool blameless = remote && !actor->IsHostileToActor(a_player);
 			// Sprint hits, knockback enchantments and crits stagger; ordinary swings don't
 			// (Minecraft's attack rate would otherwise stun-lock everything).
 			const float push = a_ev.d;
@@ -343,7 +347,7 @@ namespace skycraft
 			dir.z = 0.0f;
 			dir = dir.Length() > 1e-3f ? dir / dir.Length() : RE::NiPoint3{ 0.0f, 1.0f, 0.0f };
 
-			if (processHit && damage > 0.0f) {
+			if (processHit && damage > 0.0f && !blameless) {
 				alignas(16) std::array<std::byte, sizeof(RE::HitData)> storage{};
 				auto* hit = reinterpret_cast<RE::HitData*>(storage.data());
 				hitDataCtor(hit);
@@ -372,7 +376,7 @@ namespace skycraft
 				}
 				processHit(actor, *hit);
 			} else if (damage > 0.0f) {
-				actor->DoDamage(damage, a_player, true);
+				actor->DoDamage(damage, blameless ? nullptr : a_player, true);
 				if (stagger > 0.0f && !actor->IsDead()) {
 					const float pushHeading = std::atan2(a_ev.b, -a_ev.c);  // MC (x, z) -> Skyrim heading
 					float       sdir = (pushHeading - actor->GetAngleZ()) / (2.0f * kPi) + 0.5f;
@@ -387,10 +391,10 @@ namespace skycraft
 				RE::NiPoint3 pick = dir;
 				impacts->PlayImpactEffect(actor, weapon->impactDataSet, node->name.c_str(), pick, 128.0f, false, false);
 			}
-			if (damage > 0.0f) {
+			if (damage > 0.0f && !remote) {
 				TrainSkill(a_player, HitSkill(a_ev), a_ev.a);
 			}
-			if (!actor->IsDead() && !actor->IsPlayerTeammate() && !actor->IsInCombat()) {
+			if (!blameless && !actor->IsDead() && !actor->IsPlayerTeammate() && !actor->IsInCombat()) {
 				actor->StartCombat(a_player);
 			}
 			logger::info("hit {} ({:08X}, level {}) for {:.1f} Minecraft -> {:.0f} Skyrim damage{}{}{}", actor->GetDisplayFullName(), a_ev.formId,
@@ -712,6 +716,90 @@ namespace skycraft
 		};
 		std::vector<PendingFling> pendingFlings;
 
+		// ---- multiplayer guest: the host's Skyrim decides where shared actors are --------------
+		// Minecraft passes on where the host's Skyrim has each actor we have too (same form id), ten
+		// times a second. Our copy keeps its own AI and animations and is drawn toward that spot, so
+		// both players see it in the same place.
+		struct Puppet
+		{
+			RE::NiPoint3  pos;            // where the host has it (Skyrim units)
+			float         heading{ 0.0f };
+			std::uint32_t flags{ 0 };     // proto::ActorFlags, as the host sees it
+			float         age{ 0.0f };    // seconds since the host last said
+			bool          seenAlive{ false };
+		};
+		std::unordered_map<RE::FormID, Puppet> puppets;
+
+		void SetPuppet(const proto::McEvent& a_ev)
+		{
+			if (a_ev.formId == 0 || (a_ev.formId >> 24) == 0xFF) {
+				return;  // made up at runtime: numbered differently in every Skyrim
+			}
+			auto& p = puppets[a_ev.formId];
+			p.pos = McToSky(a_ev.a, a_ev.b, a_ev.c);
+			p.heading = McYawToHeading(a_ev.d);
+			p.flags = a_ev.flags;
+			p.age = 0.0f;
+			if (!(a_ev.flags & proto::kActorDead)) {
+				p.seenAlive = true;
+			}
+		}
+
+		void UpdatePuppets(RE::PlayerCharacter* a_player, float a_delta)
+		{
+			constexpr float kStale = 0.75f;                                              // the host stopped saying: let it be
+			constexpr float kSlack = 0.6f * static_cast<float>(proto::kUnitsPerBlock);   // close enough: leave it to its AI
+			constexpr float kSnap = 8.0f * static_cast<float>(proto::kUnitsPerBlock);    // too far to walk: put it there
+			constexpr float kSnapUp = 2.5f * static_cast<float>(proto::kUnitsPerBlock);  // another floor / ledge
+			for (auto it = puppets.begin(); it != puppets.end();) {
+				auto& p = it->second;
+				p.age += a_delta;
+				auto* actor = p.age < kStale ? RE::TESForm::LookupByID<RE::Actor>(it->first) : nullptr;
+				if (!actor) {
+					it = puppets.erase(it);
+					continue;
+				}
+				++it;
+				if (actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded()) {
+					continue;
+				}
+				if (p.flags & proto::kActorDead) {
+					// It died in the host's Skyrim while we watched (a fall, another NPC, a hit we
+					// weren't told about): it dies here too. Bodies that were already there are left alone.
+					if (p.seenAlive && !actor->IsDead() && !actor->IsEssential()) {
+						const char* name = actor->GetDisplayFullName();
+						logger::info("{} ({:08X}) died in the host's Skyrim; killing it here", name ? name : "?", actor->GetFormID());
+						const float health = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
+						actor->KillImpl(nullptr, health + 1.0f, true, false);
+					}
+					p.seenAlive = false;
+					continue;
+				}
+				// Ours to keep: followers, horses and their riders, and anything Havok is throwing around.
+				if (actor->IsDead() || actor->IsPlayerTeammate() || actor->IsAMount() || actor->IsOnMount() || actor->IsInRagdollState()) {
+					continue;
+				}
+				auto         pos = actor->GetPosition();
+				RE::NiPoint3 to = p.pos - pos;
+				const float  up = to.z;
+				to.z = 0.0f;
+				const float dist = to.Length();
+				if (dist > kSnap || std::abs(up) > kSnapUp) {
+					actor->SetPosition(p.pos, true);
+					actor->SetHeading(p.heading);
+					continue;
+				}
+				if (dist <= kSlack) {
+					continue;
+				}
+				// Faster the further behind it is; its feet stay on its own ground.
+				const float step = std::min(dist - kSlack * 0.5f, (220.0f + dist * 3.0f) * a_delta);
+				pos += to * (step / dist);
+				actor->SetPosition(pos, true);
+				actor->SetHeading(p.heading);
+			}
+		}
+
 		// Every dynamic body of an actor's ragdoll gets the same velocity: out and up from the blast.
 		bool FlingRagdoll(RE::Actor* a_actor, const RE::NiPoint3& a_center, float a_speed)
 		{
@@ -863,6 +951,7 @@ namespace skycraft
 				}
 				pendingExplosions.clear();
 				pendingFlings.clear();
+				puppets.clear();
 				link.WriteActors(nullptr, 0);
 				return;
 			}
@@ -891,6 +980,9 @@ namespace skycraft
 				case proto::kEvArrowStuck:
 					WorldRender::StickArrow(ev.formId, ev.a, ev.b, ev.c, ev.d, std::bit_cast<float>(ev.flags));
 					break;
+				case proto::kEvPuppetActor:
+					SetPuppet(ev);
+					break;
 				case proto::kEvSkillUse:
 					if (ev.formId >= static_cast<std::uint32_t>(RE::ActorValue::kOneHanded) && ev.formId <= static_cast<std::uint32_t>(RE::ActorValue::kEnchanting)) {
 						TrainSkill(a_player, static_cast<RE::ActorValue>(ev.formId), ev.a);
@@ -901,6 +993,7 @@ namespace skycraft
 				}
 			}
 			UpdateFlings(a_delta);
+			UpdatePuppets(a_player, a_delta);
 			for (auto it = pendingExplosions.begin(); it != pendingExplosions.end();) {
 				it->delay -= a_delta;
 				if (it->delay <= 0.0f) {

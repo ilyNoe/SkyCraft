@@ -1,0 +1,53 @@
+# Builds both halves of SkyCraft and packs the release files (the same as tools\package.ps1 on a PC).
+# The files end up under "Artifacts" on the run's page.
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg .tools\vcpkg
+          .tools\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Skyrim plugin
+        shell: pwsh
+        working-directory: skse
+        run: |
+          cmake --preset default
+          if ($LASTEXITCODE) { throw "configure failed" }
+          cmake --build --preset release
+          if ($LASTEXITCODE) { throw "the SKSE plugin didn't build" }
+
+      - name: Minecraft mod
+        shell: pwsh
+        working-directory: fabric
+        run: |
+          .\gradlew.bat build --no-configuration-cache
+          if ($LASTEXITCODE) { throw "the Fabric mod didn't build" }
+
+      - name: Package
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\package.ps1 -NoBuild
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyCraft
+          path: dist/*
+          if-no-files-found: error

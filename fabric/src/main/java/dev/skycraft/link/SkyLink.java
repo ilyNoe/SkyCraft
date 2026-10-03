@@ -490,6 +490,18 @@ public final class SkyLink {
 		LONG.setRelease(s, base + ER_HEAD, head + 1);
 	}
 
+	/** How many more events fit in the ring right now (0 without a link). */
+	public static synchronized int eventRoom() {
+		MemorySegment s = shm;
+		if (s == null) {
+			return 0;
+		}
+		long base = OFF_EVENT_RING;
+		long head = s.get(JAVA_LONG, base + ER_HEAD);
+		long tail = (long) LONG.getAcquire(s, base + ER_TAIL);
+		return (int) Math.max(0L, Math.min(EVENT_RING_ENTRIES, EVENT_RING_ENTRIES - (head - tail)));
+	}
+
 	// ---- world entities (write) ------------------------------------------------------------
 
 	/**

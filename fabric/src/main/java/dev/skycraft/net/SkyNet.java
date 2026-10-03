@@ -83,6 +83,52 @@ public final class SkyNet {
 		}
 	}
 
+	/**
+	 * Server -> guest: someone hit a Skyrim actor the guest's Skyrim has too (same form id), so it
+	 * takes the hit there as well. {@code flagsAndWeapon} is Proto.HIT_* | Proto.WEAPON_* << 16.
+	 */
+	public record ActorHit(int formId, float damage, float pushX, float pushZ, float pushStrength, int flagsAndWeapon) implements CustomPacketPayload {
+		public static final Type<ActorHit> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SkyCraft.MOD_ID, "actor_hit"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, ActorHit> CODEC = StreamCodec.composite(
+			ByteBufCodecs.INT, ActorHit::formId,
+			ByteBufCodecs.FLOAT, ActorHit::damage,
+			ByteBufCodecs.FLOAT, ActorHit::pushX,
+			ByteBufCodecs.FLOAT, ActorHit::pushZ,
+			ByteBufCodecs.FLOAT, ActorHit::pushStrength,
+			ByteBufCodecs.INT, ActorHit::flagsAndWeapon,
+			ActorHit::new
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	/**
+	 * Server -> guest, ten times a second: where the host's Skyrim has the actors near the guest.
+	 * The guest's Skyrim moves its own copies there, so both players see them in the same place.
+	 * {@code where} holds x, y, z, yaw for each form id, in order (Minecraft coordinates), and
+	 * {@code world} is the Skyrim world the host is in: the same coordinates mean somewhere else in
+	 * another one (an interior, say), so a guest who isn't there ignores it.
+	 */
+	public record ActorSync(int world, List<Integer> formIds, List<Integer> flags, List<Float> where) implements CustomPacketPayload {
+		public static final int MAX_ACTORS = 96;
+		public static final Type<ActorSync> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SkyCraft.MOD_ID, "actor_sync"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, ActorSync> CODEC = StreamCodec.composite(
+			ByteBufCodecs.INT, ActorSync::world,
+			ByteBufCodecs.INT.apply(ByteBufCodecs.list(MAX_ACTORS)), ActorSync::formIds,
+			ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(MAX_ACTORS)), ActorSync::flags,
+			ByteBufCodecs.FLOAT.apply(ByteBufCodecs.list(MAX_ACTORS * 4)), ActorSync::where,
+			ActorSync::new
+		);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
 	public static void init() {
 		PayloadTypeRegistry.serverboundPlay().register(Hurt.TYPE, Hurt.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(DigOpen.TYPE, DigOpen.CODEC);
@@ -97,6 +143,8 @@ public final class SkyNet {
 			context.server().execute(() -> SkyDig.reveal(player, payload.world(), payload.cells(), materials));
 		});
 		PayloadTypeRegistry.clientboundPlay().register(Died.TYPE, Died.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ActorHit.TYPE, ActorHit.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(ActorSync.TYPE, ActorSync.CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(Hurt.TYPE, (payload, context) -> {
 			ServerPlayer player = context.player();
 			// A hit's worth of damage, whatever the guest's client claims (friends only, but still).

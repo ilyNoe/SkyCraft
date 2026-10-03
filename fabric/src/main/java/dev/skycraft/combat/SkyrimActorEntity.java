@@ -5,6 +5,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -38,6 +39,8 @@ public class SkyrimActorEntity extends LivingEntity {
 	private double pushX, pushZ;
 	private float pushStrength;
 	private boolean hitThisTick;
+	// The player behind this tick's hit, if one was (multiplayer: whose hit it is).
+	private @Nullable ServerPlayer pendingAttacker;
 
 	public SkyrimActorEntity(EntityType<? extends SkyrimActorEntity> type, Level level) {
 		super(type, level);
@@ -96,6 +99,9 @@ public class SkyrimActorEntity extends LivingEntity {
 			this.pendingFlags |= Proto.HIT_PROJECTILE;
 		}
 		this.pendingWeapon = weaponClass(source);
+		if (source.getEntity() instanceof ServerPlayer player) {
+			this.pendingAttacker = player;
+		}
 		if (source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)) {
 			this.pendingFlags |= Proto.HIT_FIRE;
 		}
@@ -161,6 +167,13 @@ public class SkyrimActorEntity extends LivingEntity {
 		this.pushStrength = 0.0F;
 		this.hitThisTick = false;
 		return hit;
+	}
+
+	/** The player whose hit {@link #takeHit} just returned (null: fire, an explosion, ...); clears it. */
+	public @Nullable ServerPlayer takeAttacker() {
+		ServerPlayer attacker = this.pendingAttacker;
+		this.pendingAttacker = null;
+		return attacker;
 	}
 
 	@Override
