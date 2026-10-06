@@ -736,6 +736,9 @@ namespace skycraft
 			if (a_ev.formId == 0 || (a_ev.formId >> 24) == 0xFF) {
 				return;  // made up at runtime: numbered differently in every Skyrim
 			}
+			if (puppets.empty()) {
+				logger::info("multiplayer: following the host's Skyrim actors");
+			}
 			auto& p = puppets[a_ev.formId];
 			p.pos = McToSky(a_ev.a, a_ev.b, a_ev.c);
 			p.heading = McYawToHeading(a_ev.d);
@@ -806,6 +809,12 @@ namespace skycraft
 				to.z = 0.0f;
 				const float dist = to.Length();
 				if (dist > kSnap || std::abs(up) > kSnapUp) {
+					static int logged = 0;
+					if (logged < 60) {
+						++logged;
+						const char* name = actor->GetDisplayFullName();
+						logger::info("multiplayer: {} ({:08X}) is {:.0f} units from where the host has it; putting it there", name ? name : "?", actor->GetFormID(), dist);
+					}
 					actor->SetPosition(p.pos, true);
 					actor->SetHeading(p.heading);
 					continue;

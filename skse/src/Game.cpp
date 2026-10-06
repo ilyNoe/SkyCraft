@@ -640,6 +640,11 @@ namespace skycraft
 			st.minecraftOwnsPlayer = puppet || (arriving && !a_player->IsDead());
 			if (puppet != st.puppeting) {
 				logger::info("puppet {}", puppet ? "on (Minecraft drives the player)" : "off");
+				if (!puppet) {
+					logger::info("puppet off because: Minecraft {}, in its world {}, teleport acknowledged {} ({} of {}), loading {} (cell {}, 3D {}), dead {}, takeover {}",
+						haveMc, st.mcInWorld.load(), mc.teleportAck == teleportSeq, mc.teleportAck, teleportSeq, loading, cell != nullptr, a_player->Is3DLoaded(),
+						a_player->IsDead(), takeover ? takeover : "no");
+				}
 			}
 			st.puppeting = puppet;
 			if (puppet) {
@@ -787,6 +792,9 @@ namespace skycraft
 
 			if (puppet) {
 				const auto pos = McToSky(feetX, feetY, feetZ);
+				if (const float jump = pos.GetDistance(a_player->GetPosition()); jump > 2000.0f) {
+					logger::info("Minecraft moves the player {:.0f} units in one frame, to Minecraft {:.1f} {:.1f} {:.1f}", jump, feetX, feetY, feetZ);
+				}
 				a_player->SetPosition(pos, true);
 				if (auto* controller = a_player->GetCharController()) {
 					// Minecraft moves the player; Skyrim keeps no momentum or fall damage of its own.
