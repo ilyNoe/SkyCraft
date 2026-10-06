@@ -73,7 +73,14 @@ public final class SkyCraftClient implements ClientModInitializer {
 			if (dev.skycraft.link.SkyLink.eventRoom() < formIds.size() + 128) {
 				return;
 			}
+			// Only actors around where this player's Skyrim has them (the host's server may not know
+			// that yet, right after joining): Skyrim has nothing loaded further out.
+			var here = SkyClient.sky();
 			for (int i = 0; i < formIds.size(); i++) {
+				double dx = where.get(i * 4) - here.x, dy = where.get(i * 4 + 1) - here.y, dz = where.get(i * 4 + 2) - here.z;
+				if (dx * dx + dy * dy + dz * dz > 72.0 * 72.0) {
+					continue;
+				}
 				dev.skycraft.link.SkyLink.pushEvent(dev.skycraft.link.Proto.EV_PUPPET_ACTOR, formIds.get(i), where.get(i * 4), where.get(i * 4 + 1),
 					where.get(i * 4 + 2), where.get(i * 4 + 3), flags.get(i));
 			}

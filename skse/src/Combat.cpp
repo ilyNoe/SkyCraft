@@ -752,6 +752,10 @@ namespace skycraft
 			constexpr float kSlack = 0.6f * static_cast<float>(proto::kUnitsPerBlock);   // close enough: leave it to its AI
 			constexpr float kSnap = 8.0f * static_cast<float>(proto::kUnitsPerBlock);    // too far to walk: put it there
 			constexpr float kSnapUp = 2.5f * static_cast<float>(proto::kUnitsPerBlock);  // another floor / ledge
+			// Only ever within the part of the world that is loaded around this player: an actor put
+			// somewhere Skyrim has no cell or navmesh for crashes its pathfinding.
+			constexpr float kReach = 60.0f * static_cast<float>(proto::kUnitsPerBlock);
+			const auto      playerPos = a_player->GetPosition();
 			for (auto it = puppets.begin(); it != puppets.end();) {
 				auto& p = it->second;
 				p.age += a_delta;
@@ -761,7 +765,8 @@ namespace skycraft
 					continue;
 				}
 				++it;
-				if (actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded()) {
+				if (actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded() || !actor->GetParentCell() ||
+					p.pos.GetDistance(playerPos) > kReach || actor->GetPosition().GetDistance(playerPos) > kReach) {
 					continue;
 				}
 				// Dead in one Skyrim and alive in the other. A moment of that is only the news travelling;
