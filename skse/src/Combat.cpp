@@ -727,6 +727,7 @@ namespace skycraft
 			std::uint32_t flags{ 0 };     // proto::ActorFlags, as the host sees it
 			float         age{ 0.0f };    // seconds since the host last said
 			bool          seenAlive{ false };
+			float         mismatch{ 0.0f };  // seconds it has been dead here and alive there, or the reverse
 		};
 		std::unordered_map<RE::FormID, Puppet> puppets;
 
@@ -763,16 +764,31 @@ namespace skycraft
 				if (actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded()) {
 					continue;
 				}
-				if (p.flags & proto::kActorDead) {
+				// Dead in one Skyrim and alive in the other. A moment of that is only the news travelling;
+				// longer, and one of the players reloaded a save (dying does that) and got the old world back.
+				const bool hostDead = (p.flags & proto::kActorDead) != 0;
+				p.mismatch = hostDead != actor->IsDead() ? p.mismatch + a_delta : 0.0f;
+				if (hostDead) {
 					// It died in the host's Skyrim while we watched (a fall, another NPC, a hit we
-					// weren't told about): it dies here too. Bodies that were already there are left alone.
-					if (p.seenAlive && !actor->IsDead() && !actor->IsEssential()) {
+					// weren't told about), or it's an enemy the host already dealt with: it dies here
+					// too. Other bodies that were already there (someone long dead in the host's game) are left alone.
+					const bool watched = p.seenAlive;
+					const bool staleEnemy = p.mismatch > 1.0f && actor->IsHostileToActor(a_player);
+					if ((watched || staleEnemy) && !actor->IsDead() && !actor->IsEssential()) {
 						const char* name = actor->GetDisplayFullName();
 						logger::info("{} ({:08X}) died in the host's Skyrim; killing it here", name ? name : "?", actor->GetFormID());
 						const float health = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
 						actor->KillImpl(nullptr, health + 1.0f, true, false);
 					}
 					p.seenAlive = false;
+					continue;
+				}
+				// The host is fighting an enemy we have as a body (the host reloaded): it gets up here too.
+				if (actor->IsDead() && (p.flags & proto::kActorHostile) && p.mismatch > 2.5f) {
+					const char* name = actor->GetDisplayFullName();
+					logger::info("{} ({:08X}) is alive in the host's Skyrim; reviving it here", name ? name : "?", actor->GetFormID());
+					actor->Resurrect(false, true);
+					p.mismatch = 0.0f;
 					continue;
 				}
 				// Ours to keep: followers, horses and their riders, and anything Havok is throwing around.
