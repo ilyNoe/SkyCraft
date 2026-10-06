@@ -4,12 +4,16 @@ name: build
 
 on:
   push:
+    branches-ignore:
+      - 'build-output/**'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-2025-vs2026
     timeout-minutes: 90
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,3 +55,23 @@ jobs:
           name: SkyCraft
           path: dist/*
           if-no-files-found: error
+
+      # The built files (and the plugin with its debug symbols, for reading crash logs) also go to a
+      # branch of their own, build-output/<branch>, replaced by each build.
+      - name: Publish build output
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $out = "$env:RUNNER_TEMP\out"
+          New-Item -ItemType Directory $out | Out-Null
+          Copy-Item dist\* $out
+          Copy-Item skse\build\RelWithDebInfo\SkyCraft.dll $out
+          Get-ChildItem $out | Where-Object { $_.Length -gt 95MB } | Remove-Item
+          Get-ChildItem $out | ForEach-Object { "{0,-40} {1,12:N0} bytes" -f $_.Name, $_.Length }
+          Set-Location $out
+          git init -q
+          git add -A
+          git -c user.name="SkyCraft build" -c user.email="build@users.noreply.github.com" commit -q -m "Build of $env:GITHUB_SHA"
+          git push -q -f "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git" "HEAD:refs/heads/build-output/$env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE) { throw "couldn't publish the build output" }
