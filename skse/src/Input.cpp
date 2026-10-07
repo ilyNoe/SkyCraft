@@ -39,6 +39,7 @@ namespace skycraft
 		constexpr std::uint32_t kDikG = 0x22;        // Skyrim activate: doors, NPCs, containers, items
 		constexpr std::uint32_t kDikH = 0x23;        // Skyrim wait (T is Minecraft chat)
 		constexpr std::uint32_t kDikJ = 0x24;        // Skyrim quest journal
+		constexpr std::uint32_t kDikK = 0x25;        // Skyrim character menu (skills and levelling up, items, magic)
 		constexpr std::uint32_t kDikM = 0x32;        // Skyrim map
 		constexpr std::uint32_t kDikO = 0x18;        // Minecraft pause / options menu (Esc is Skyrim's)
 		constexpr std::uint32_t kDikF9 = 0x43;       // Skyrim quickload
@@ -60,6 +61,15 @@ namespace skycraft
 		{
 			if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
 				queue->AddMessage(RE::MapMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+			}
+		}
+
+		// Skyrim's character menu, the one Tab opens: from there the skills (the only place a level
+		// gained is taken, which Skyrim's quests with a level requirement wait for), items and magic.
+		void OpenCharacterMenu()
+		{
+			if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
+				queue->AddMessage(RE::TweenMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
 			}
 		}
 
@@ -164,9 +174,12 @@ namespace skycraft
 										}
 										break;
 									}
-									if (code == kDikG || code == kDikH || code == kDikO) {
+									if (code == kDikG || code == kDikH || code == kDikO || code == kDikK) {
 										if (down) {
-											if (code == kDikG) {
+											if (code == kDikK) {
+												Input::ReleaseAll();
+												OpenCharacterMenu();
+											} else if (code == kDikG) {
 												ActivateSkyrimTarget();
 											} else if (code == kDikH) {
 												OpenWaitMenu();
