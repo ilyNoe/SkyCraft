@@ -1,14 +1,46 @@
 # Builds both halves of SkyCraft and packs the release files (the same as tools\package.ps1 on a PC).
-# The files end up under "Artifacts" on the run's page.
+# The files end up under "Artifacts" on the run's page, and on a branch of their own
+# (build-output/<branch>, replaced by each build) together with the build logs.
 name: build
 
 on:
   push:
     branches-ignore:
       - 'build-output/**'
+      - 'build-log/**'
   workflow_dispatch:
 
 jobs:
+  # The Minecraft mod alone: a quick answer on whether the Java side compiles.
+  mod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Minecraft mod
+        working-directory: fabric
+        run: |
+          set -o pipefail
+          sh ./gradlew build --no-configuration-cache --console=plain 2>&1 | tee "$RUNNER_TEMP/mod.log"
+      - name: Publish the log
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir "$RUNNER_TEMP/log" && cd "$RUNNER_TEMP/log"
+          cp "$RUNNER_TEMP/mod.log" . 2>/dev/null || echo "no log" > mod.log
+          echo "${{ job.status }} $GITHUB_SHA" > status.txt
+          git init -q
+          git add -A
+          git -c user.name="SkyCraft build" -c user.email="build@users.noreply.github.com" commit -q -m "Mod build log of $GITHUB_SHA"
+          git push -q -f "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/build-log/$GITHUB_REF_NAME"
+
   build:
     runs-on: windows-2025-vs2026
     timeout-minutes: 90
@@ -36,14 +68,14 @@ jobs:
         run: |
           cmake --preset default
           if ($LASTEXITCODE) { throw "configure failed" }
-          cmake --build --preset release
+          cmake --build --preset release 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\plugin.log"
           if ($LASTEXITCODE) { throw "the SKSE plugin didn't build" }
 
       - name: Minecraft mod
         shell: pwsh
         working-directory: fabric
         run: |
-          .\gradlew.bat build --no-configuration-cache
+          .\gradlew.bat build --no-configuration-cache --console=plain 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\mod.log"
           if ($LASTEXITCODE) { throw "the Fabric mod didn't build" }
 
       - name: Package
@@ -56,17 +88,20 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      # The built files (and the plugin with its debug symbols, for reading crash logs) also go to a
-      # branch of their own, build-output/<branch>, replaced by each build.
       - name: Publish build output
+        if: always()
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $out = "$env:RUNNER_TEMP\out"
           New-Item -ItemType Directory $out | Out-Null
-          Copy-Item dist\* $out
-          Copy-Item skse\build\RelWithDebInfo\SkyCraft.dll $out
+          if (Test-Path dist) { Copy-Item dist\* $out }
+          if (Test-Path skse\build\RelWithDebInfo\SkyCraft.dll) { Copy-Item skse\build\RelWithDebInfo\SkyCraft.dll $out }
+          foreach ($log in "plugin.log", "mod.log") {
+            if (Test-Path "$env:RUNNER_TEMP\$log") { Select-String -Path "$env:RUNNER_TEMP\$log" -Pattern "error|warning C4|FAILED|\.java:" | Select-Object -Last 400 | ForEach-Object { $_.Line } | Set-Content "$out\$log" }
+          }
+          "${{ job.status }} $env:GITHUB_SHA" | Set-Content "$out\status.txt"
           Get-ChildItem $out | Where-Object { $_.Length -gt 95MB } | Remove-Item
           Get-ChildItem $out | ForEach-Object { "{0,-40} {1,12:N0} bytes" -f $_.Name, $_.Length }
           Set-Location $out

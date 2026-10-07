@@ -108,6 +108,14 @@ namespace skycraft
 		void SetActivatePromptKey(bool a_minecraftControls);
 	}
 
+	namespace Quests
+	{
+		// Main thread, once per frame: tells Minecraft when a Daedric quest has just been completed.
+		void PerFrame(bool a_loading, float a_delta);
+		// A save was loaded (or a new game started): the quests it has completed already aren't news.
+		void OnGameLoaded();
+	}
+
 	namespace Combat
 	{
 		void Install();

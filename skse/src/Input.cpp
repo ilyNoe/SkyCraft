@@ -48,6 +48,21 @@ namespace skycraft
 			return a_code == kDikEscape || a_code == kDikConsole || a_code == kDikJ || a_code == kDikM || a_code == kDikF9;
 		}
 
+		// The key that says M on this keyboard, when that isn't the key Skyrim reads as M (on a French
+		// AZERTY keyboard it's the one right of L): it opens the map too. 0 if it's the same key.
+		std::uint32_t MapKeyOnThisKeyboard()
+		{
+			const auto code = MapVirtualKeyExW('M', MAPVK_VK_TO_VSC, GetKeyboardLayout(0));
+			return code != kDikM && code != 0 && code < 0x80 ? code : 0;
+		}
+
+		void OpenMap()
+		{
+			if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
+				queue->AddMessage(RE::MapMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+			}
+		}
+
 		float lookDx = 0.0f;
 		float lookDy = 0.0f;
 
@@ -142,6 +157,12 @@ namespace skycraft
 								if (!st.mcScreenOpen) {
 									if (IsSkyrimMenuKey(code)) {
 										break;  // MenuControls (see the hook below) opens Skyrim's menu
+									}
+									if (const auto mapKey = MapKeyOnThisKeyboard(); mapKey != 0 && code == mapKey) {
+										if (down) {
+											OpenMap();
+										}
+										break;
 									}
 									if (code == kDikG || code == kDikH || code == kDikO) {
 										if (down) {

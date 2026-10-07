@@ -63,6 +63,7 @@ public final class InputBridge {
 			}
 			case Proto.IN_RELEASE_ALL -> releaseAll();
 			case Proto.IN_HURT -> hurt(minecraft, code, a / 100.0F, b, c);
+			case Proto.IN_QUEST_DONE -> questDone(minecraft, code);
 			case Proto.IN_OPEN_MENU -> {
 				if (minecraft.gui.screen() == null && minecraft.player != null) {
 					releaseAll();
@@ -92,6 +93,27 @@ public final class InputBridge {
 			ServerPlayer player = server.getPlayerList().getPlayer(uuid);
 			if (player != null) {
 				SkyCombat.hurtPlayer(player, kind, skyrimDamage, attacker, flags);
+			}
+		});
+	}
+
+	/** This player's Skyrim completed a Daedric quest: the world's server leaves the reward chest. */
+	private static void questDone(Minecraft minecraft, int quest) {
+		var server = minecraft.getSingleplayerServer();
+		if (minecraft.player == null) {
+			return;
+		}
+		if (server == null) {
+			if (net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(dev.skycraft.net.SkyNet.QuestDone.TYPE)) {
+				net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(new dev.skycraft.net.SkyNet.QuestDone(quest));
+			}
+			return;
+		}
+		var uuid = minecraft.player.getUUID();
+		server.execute(() -> {
+			ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+			if (player != null) {
+				dev.skycraft.world.SkyRewards.questDone(player, quest);
 			}
 		});
 	}

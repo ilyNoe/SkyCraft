@@ -129,7 +129,23 @@ public final class SkyNet {
 		}
 	}
 
+	/** Guest -> server: the guest's Skyrim completed a Daedric quest (as proto::InputEvent kInQuestDone). */
+	public record QuestDone(int quest) implements CustomPacketPayload {
+		public static final Type<QuestDone> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SkyCraft.MOD_ID, "quest_done"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, QuestDone> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, QuestDone::quest, QuestDone::new);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
 	public static void init() {
+		PayloadTypeRegistry.serverboundPlay().register(QuestDone.TYPE, QuestDone.CODEC);
+		ServerPlayNetworking.registerGlobalReceiver(QuestDone.TYPE, (payload, context) -> {
+			ServerPlayer player = context.player();
+			context.server().execute(() -> dev.skycraft.world.SkyRewards.questDone(player, payload.quest()));
+		});
 		PayloadTypeRegistry.serverboundPlay().register(Hurt.TYPE, Hurt.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(DigOpen.TYPE, DigOpen.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(DigReveal.TYPE, DigReveal.CODEC);
