@@ -98,7 +98,7 @@ public final class InputBridge {
 	}
 
 	/** This player's Skyrim completed a Daedric quest: the world's server leaves the reward chest. */
-	private static void questDone(Minecraft minecraft, int quest) {
+	static void questDone(Minecraft minecraft, int quest) {
 		var server = minecraft.getSingleplayerServer();
 		if (minecraft.player == null) {
 			return;

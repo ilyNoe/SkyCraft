@@ -24,6 +24,20 @@ public final class SkyCraftClient implements ClientModInitializer {
 						net.minecraft.client.Minecraft.getInstance().execute(() -> MirrorWorld.joinFriend(net.minecraft.client.Minecraft.getInstance(), link));
 						return 1;
 					})));
+			// Testing the Daedric quest rewards without playing the quest: /daedra 10 is what Skyrim
+			// completing DA10 (Molag Bal) does. 1 Azura ... 16 Vaermina, as Skyrim numbers them (no 12).
+			dispatcher.register(net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal("daedra")
+				.then(net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument("quest", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 16))
+					.executes(c -> {
+						int number = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "quest");
+						if (number == 12) {
+							c.getSource().sendFeedback(net.minecraft.network.chat.Component.literal("Il n'y a pas de quête daedra n° 12 (1 à 11, 13 à 16)."));
+							return 0;
+						}
+						int quest = number < 12 ? number - 1 : number - 2;
+						net.minecraft.client.Minecraft.getInstance().execute(() -> InputBridge.questDone(net.minecraft.client.Minecraft.getInstance(), quest));
+						return 1;
+					})));
 			dispatcher.register(net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal("leave").executes(c -> {
 				net.minecraft.client.Minecraft.getInstance().execute(() -> MirrorWorld.leaveFriend(net.minecraft.client.Minecraft.getInstance()));
 				return 1;
