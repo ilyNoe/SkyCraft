@@ -82,7 +82,7 @@ public final class SkyRewards {
 				for (int i = 0; i < 2; i++) {
 					ItemStack copy = stack.copy();
 					if (!player.getInventory().add(copy)) {
-						player.drop(copy, false);
+						player.spawnAtLocation(level, copy);
 					}
 				}
 			}
