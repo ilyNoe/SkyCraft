@@ -101,7 +101,8 @@ public final class SkyMobs {
 			ServerLevel level = host.level();
 			List<Mob> near = level.getEntitiesOfClass(Mob.class, host.getBoundingBox().inflate(REPORT_RANGE),
 				m -> m.isAlive() && m instanceof Enemy);
-			near.sort(Comparator.comparingDouble(m -> m.distanceToSqr(host)));
+			ServerPlayer centre = host;
+			near.sort(Comparator.comparingDouble(m -> m.distanceToSqr(centre)));
 			for (Mob m : near) {
 				int target = m.getTarget() instanceof SkyrimActorEntity proxy ? proxy.formId() : 0;
 				float health = m.getMaxHealth() > 0.0F ? Math.clamp(m.getHealth() / m.getMaxHealth(), 0.0F, 1.0F) : 0.0F;
