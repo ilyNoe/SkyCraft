@@ -36,6 +36,17 @@ shared memory. Minecraft runs hidden in the background, and Skyrim draws everyth
   Damage is scaled to NPC level, and NPCs fight back.
   - NPCs collide with blocks and path around them.
   - Lava and fire hurt NPCs, and NPCs press pressure plates.
+- **Minecraft mobs vs Skyrim's NPCs:** zombies, skeletons, spiders, creepers and other hostile
+  mobs go for the nearest Skyrim NPC as readily as for you. The NPC they attack fights back, and
+  guards and followers nearby join in; Skyrim's hits land on the Minecraft mob. A mob's hits are
+  never blamed on you. Undead don't burn in daylight (there's no Minecraft shade under Skyrim's sky).
+- **The merchant:** `/marchand` (or `/merchant`) puts a Minecraft merchant in front of you. He
+  never moves, can't be hurt and never runs out. He sells the **Fus Ro Dah sword** and mob spawn
+  eggs for emeralds (dig them out of Skyrim's rock), and buys raw iron, raw gold and diamonds.
+  `/marchand retirer` (`/merchant remove`) removes merchants within 8 blocks.
+- **The Fus Ro Dah sword:** a netherite sword that shouts. Right click and your Skyrim character
+  shouts Unrelenting Force: Skyrim's own shockwave throws the NPCs in front of you, and Minecraft
+  mobs in the cone are blown away too. Five seconds between shouts.
 - **Skyrim progression:**
   - Your Skyrim skills level up from Minecraft play. Swords, maces and tools train
     One-Handed; axes and spears train Two-Handed; bows and anything thrown train Archery.
@@ -166,6 +177,8 @@ Every other key is Minecraft's: **E** inventory, **F5** camera, **T** chat, **/*
 - Sign text isn't drawn yet.
 - All Skyrim interiors share one Minecraft world, so blocks placed in one interior can appear in
   another at the same coordinates.
+- Only the host's Skyrim gives Minecraft mobs a body its NPCs can fight. In a guest's Skyrim, NPCs
+  still take the mobs' hits but can't hit the mobs back.
 - Multiplayer syncs only the Minecraft world. Each player has their own Skyrim, and guests
   can't hit their own Skyrim NPCs yet.
 - Mods that also take over the camera (Improved Camera SE, SmoothCam, True Directional Movement)
