@@ -181,7 +181,7 @@ namespace skycraft
 			for (auto& handle : lists->highActorHandles) {
 				auto actorPtr = handle.get();
 				auto* actor = actorPtr.get();
-				if (!actor || actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded() || actor->IsGhost()) {
+				if (!actor || actor == a_player || actor->IsDisabled() || !actor->Is3DLoaded() || actor->IsGhost() || MobFoes::IsStandIn(actor)) {
 					continue;
 				}
 				const auto pos = actor->GetPosition();
@@ -320,10 +320,52 @@ namespace skycraft
 			return root;
 		}
 
+		// A Minecraft mob (zombie, skeleton, spider...) hit an actor. Scaled like a player's hit, but
+		// it's the mob's doing: no crime, no skill, and the actor fights the mob's stand-in back.
+		// a_mob is that stand-in (null: none here, e.g. a guest's Skyrim, which has no stand-ins).
+		void ApplyMobHit(const proto::McEvent& a_ev, RE::Actor* a_mob)
+		{
+			auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_ev.formId);
+			if (!actor || actor->IsDead() || MobFoes::IsStandIn(actor)) {
+				return;
+			}
+			const float scale = 5.0f + 0.25f * static_cast<float>(actor->GetLevel());
+			const float damage = a_ev.a * scale;
+			const bool  projectile = (a_ev.flags & proto::kHitProjectile) != 0;
+			const float push = a_ev.d;
+			const float stagger = push > 0.45f ? std::clamp((push - 0.4f) * 1.2f, 0.25f, 1.0f) : 0.0f;
+			auto*       weapon = StandInWeapon(projectile ? proto::kWeaponArrow : proto::kWeaponBlunt);
+			auto*       node = HitNode(actor);
+			if (damage > 0.0f) {
+				actor->DoDamage(damage, a_mob, true);
+				if (stagger > 0.0f && !actor->IsDead()) {
+					const float pushHeading = std::atan2(a_ev.b, -a_ev.c);  // MC (x, z) -> Skyrim heading
+					float       sdir = (pushHeading - actor->GetAngleZ()) / (2.0f * kPi) + 0.5f;
+					sdir -= std::floor(sdir);
+					actor->SetGraphVariableFloat("staggerDirection", sdir);
+					actor->SetGraphVariableFloat("staggerMagnitude", stagger);
+					actor->NotifyAnimationGraph("staggerStart");
+				}
+				if (auto* impacts = RE::BGSImpactManager::GetSingleton(); impacts && weapon && weapon->impactDataSet && node) {
+					RE::NiPoint3 dir{ a_ev.b, -a_ev.c, 0.0f };
+					impacts->PlayImpactEffect(actor, weapon->impactDataSet, node->name.c_str(), dir, 128.0f, false, false);
+				}
+			}
+			if (a_mob && !actor->IsDead() && !actor->IsInCombat()) {
+				actor->StartCombat(a_mob);
+			}
+			logger::info("mob hit {} ({:08X}, level {}) for {:.1f} Minecraft -> {:.0f} Skyrim damage{}{}", actor->GetDisplayFullName(), a_ev.formId, actor->GetLevel(),
+				a_ev.a, damage, projectile ? ", projectile" : "", a_mob ? "" : " (no stand-in to fight back)");
+		}
+
 		// A Minecraft hit on an actor's stand-in: real damage, scaled so Minecraft gear stays
 		// meaningful against higher-level enemies, delivered the way a Skyrim weapon would.
 		void ApplyHit(RE::PlayerCharacter* a_player, const proto::McEvent& a_ev)
 		{
+			if (a_ev.flags & proto::kHitMob) {
+				ApplyMobHit(a_ev, nullptr);  // a mob's hit, passed on from the host's world
+				return;
+			}
 			auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_ev.formId);
 			if (!actor || actor->IsDead()) {
 				return;
@@ -584,7 +626,8 @@ namespace skycraft
 			for (auto& handle : lists->highActorHandles) {
 				auto actorPtr = handle.get();
 				auto* actor = actorPtr.get();
-				if (!actor || actor == a_player || actor->IsDead() || !actor->Is3DLoaded() || actor->GetPosition().GetDistance(playerPos) > kActorRange) {
+				if (!actor || actor == a_player || actor->IsDead() || !actor->Is3DLoaded() || MobFoes::IsStandIn(actor) ||
+					actor->GetPosition().GetDistance(playerPos) > kActorRange) {
 					continue;
 				}
 				const auto hazard = HazardAtActor(actor);
@@ -897,6 +940,9 @@ namespace skycraft
 			}
 			int people = 0, objects = 0;
 			for (auto* ref : things) {
+				if (auto* actor = ref->As<RE::Actor>(); actor && MobFoes::IsStandIn(actor)) {
+					continue;  // a Minecraft mob: Minecraft's explosion already threw it
+				}
 				const auto  pos = ref->GetPosition();
 				const float dist = pos.GetDistance(a_blast.center);
 				const float falloff = std::clamp(1.0f - dist / reach, 0.0f, 1.0f);
@@ -948,6 +994,81 @@ namespace skycraft
 			}
 			logger::info("Minecraft explosion (radius {:.1f}): knocked {} people away, threw {} objects", a_blast.radius, people, objects);
 		}
+
+		// ---- the Fus Ro Dah sword -----------------------------------------------------------------
+		// The player shouts Unrelenting Force: Skyrim's own shout spell, cast from the player, so the
+		// shockwave, its sound, the ragdolls and the crime are all Skyrim's. A moment later anyone in
+		// the cone it didn't throw (no spell found, or it missed) is knocked away by hand.
+		constexpr RE::FormID kUnrelentingForce[3] = { 0x00013E08, 0x00013F39, 0x00013F3A };  // VoiceUnrelentingForce01-03
+
+		struct PendingShout
+		{
+			RE::NiPoint3 origin;
+			RE::NiPoint3 dir;    // flat, unit
+			float        delay;  // seconds
+			int          words;
+		};
+		std::vector<PendingShout> pendingShouts;
+
+		void Shout(RE::PlayerCharacter* a_player, const proto::McEvent& a_ev)
+		{
+			const int words = std::clamp(static_cast<int>(a_ev.a + 0.5f), 1, 3);
+			bool      cast = false;
+			if (auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(kUnrelentingForce[words - 1])) {
+				if (auto* caster = a_player->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)) {
+					caster->CastSpellImmediate(spell, false, nullptr, 1.0f, false, 0.0f, a_player);
+					cast = true;
+				}
+			}
+			const float heading = a_player->data.angle.z;
+			pendingShouts.push_back({ a_player->GetPosition(), { std::sin(heading), std::cos(heading), 0.0f }, cast ? 0.4f : 0.0f, words });
+			logger::info("Fus Ro Dah: {} word(s) of Unrelenting Force{}", words, cast ? "" : " (spell not found: knocking the cone away by hand)");
+		}
+
+		void ShoveCone(RE::PlayerCharacter* a_player, const PendingShout& a_shout)
+		{
+			auto* lists = RE::ProcessLists::GetSingleton();
+			if (!lists) {
+				return;
+			}
+			const float reach = (8.0f + 2.0f * static_cast<float>(a_shout.words)) * static_cast<float>(proto::kUnitsPerBlock);
+			const float coneCos = 0.766f;  // 40 degrees either side
+			int         shoved = 0;
+			for (auto& handle : lists->highActorHandles) {
+				auto  actorPtr = handle.get();
+				auto* actor = actorPtr.get();
+				if (!actor || actor == a_player || actor->IsDead() || !actor->Is3DLoaded() || actor->IsInRagdollState() || MobFoes::IsStandIn(actor)) {
+					continue;
+				}
+				RE::NiPoint3 to = actor->GetPosition() - a_shout.origin;
+				to.z = 0.0f;
+				const float dist = to.Length();
+				if (dist < 1.0f || dist > reach || (to.x * a_shout.dir.x + to.y * a_shout.dir.y) / dist < coneCos) {
+					continue;
+				}
+				if (auto* process = actor->GetActorRuntimeData().currentProcess) {
+					const float falloff = 1.0f - 0.6f * dist / reach;
+					process->KnockExplosion(actor, a_shout.origin - a_shout.dir * 100.0f, 30.0f * falloff * static_cast<float>(a_shout.words) / 3.0f);
+					++shoved;
+				}
+			}
+			if (shoved) {
+				logger::info("Fus Ro Dah: knocked {} more people away", shoved);
+			}
+		}
+
+		void UpdateShouts(RE::PlayerCharacter* a_player, float a_delta)
+		{
+			for (auto it = pendingShouts.begin(); it != pendingShouts.end();) {
+				it->delay -= a_delta;
+				if (it->delay <= 0.0f) {
+					ShoveCone(a_player, *it);
+					it = pendingShouts.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
 	}
 
 	namespace Combat
@@ -981,6 +1102,7 @@ namespace skycraft
 				}
 				pendingExplosions.clear();
 				pendingFlings.clear();
+				pendingShouts.clear();
 				puppets.clear();
 				link.WriteActors(nullptr, 0);
 				return;
@@ -1013,6 +1135,12 @@ namespace skycraft
 				case proto::kEvPuppetActor:
 					SetPuppet(ev);
 					break;
+				case proto::kEvMobHitActor:
+					ApplyMobHit(ev, MobFoes::StandInFor(ev.weapon));
+					break;
+				case proto::kEvShout:
+					Shout(a_player, ev);
+					break;
 				case proto::kEvSkillUse:
 					if (ev.formId >= static_cast<std::uint32_t>(RE::ActorValue::kOneHanded) && ev.formId <= static_cast<std::uint32_t>(RE::ActorValue::kEnchanting)) {
 						TrainSkill(a_player, static_cast<RE::ActorValue>(ev.formId), ev.a);
@@ -1024,6 +1152,7 @@ namespace skycraft
 			}
 			UpdateFlings(a_delta);
 			UpdatePuppets(a_player, a_delta);
+			UpdateShouts(a_player, a_delta);
 			for (auto it = pendingExplosions.begin(); it != pendingExplosions.end();) {
 				it->delay -= a_delta;
 				if (it->delay <= 0.0f) {

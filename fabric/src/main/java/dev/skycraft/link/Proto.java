@@ -8,7 +8,7 @@ public final class Proto {
 	}
 
 	public static final int MAGIC = 0x43594B53;
-	public static final int VERSION = 13;
+	public static final int VERSION = 14;
 	// A second client on the same PC (multiplayer testing) talks to its own stand-in Skyrim:
 	// -Dskycraft.link=Local\SkyCraft_guest (see tools/fake_guest.py).
 	public static final String MAPPING_NAME = System.getProperty("skycraft.link", "Local\\SkyCraft_v1");
@@ -41,6 +41,7 @@ public final class Proto {
 	public static final int IN_HURT = 7;
 	public static final int IN_OPEN_MENU = 8;
 	public static final int IN_QUEST_DONE = 9;
+	public static final int IN_MOB_HURT = 10;
 	public static final int HURT_MELEE = 0;
 	public static final int HURT_PROJECTILE = 1;
 	public static final int HURT_MAGIC = 2;
@@ -59,6 +60,14 @@ public final class Proto {
 	public static final int ACTOR_ESSENTIAL = 1 << 2;
 	public static final int ACTOR_IN_COMBAT = 1 << 3;
 
+	// Mob table (relative to OFF_MOB_TABLE)
+	public static final long OFF_MOB_TABLE = 0x16200;
+	public static final int MAX_MOBS = 48;
+	public static final long MT_SEQ = 0x00;
+	public static final long MT_COUNT = 0x04;
+	public static final long MT_RECORDS = 0x40;
+	public static final long MOB_RECORD_BYTES = 32;
+
 	// Event ring (relative to OFF_EVENT_RING)
 	public static final int EVENT_RING_ENTRIES = 512;
 	public static final long ER_HEAD = 0x00;
@@ -71,6 +80,8 @@ public final class Proto {
 	public static final int EV_ARROW_STUCK = 4;
 	public static final int EV_SKILL_USE = 5;
 	public static final int EV_PUPPET_ACTOR = 6;
+	public static final int EV_MOB_HIT_ACTOR = 7;
+	public static final int EV_SHOUT = 8;
 	// Skyrim skills (ActorValue) Minecraft reports use of; weapon skills come from EV_HIT_ACTOR.
 	public static final int SKILL_BLOCK = 9;
 	public static final int SKILL_SMITHING = 10;
@@ -81,6 +92,7 @@ public final class Proto {
 	public static final int HIT_SWEEP = 1 << 2;
 	public static final int HIT_FIRE = 1 << 3;
 	public static final int HIT_REMOTE = 1 << 4;
+	public static final int HIT_MOB = 1 << 5;
 	public static final int WEAPON_UNARMED = 0;
 	public static final int WEAPON_BLADE = 1;
 	public static final int WEAPON_AXE = 2;

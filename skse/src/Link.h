@@ -34,6 +34,9 @@ namespace skycraft
 
 		// Actor table (producer, main thread): nearby actors Minecraft mirrors as hittable stand-ins.
 		void WriteActors(const proto::ActorRecord* a_records, std::uint32_t a_count);
+		// Mob table (seqlock read, main thread): hostile Minecraft mobs near the player. Returns false
+		// (leaving a_out empty) if no consistent snapshot was obtained.
+		bool ReadMobs(std::vector<proto::MobRecord>& a_out) const;
 		// Event ring (consumer, main thread). Returns false when empty.
 		bool PopEvent(proto::McEvent& a_out);
 		// World entities + block outline (seqlock read, render thread).

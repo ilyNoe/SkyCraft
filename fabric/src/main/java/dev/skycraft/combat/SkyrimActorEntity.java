@@ -41,6 +41,8 @@ public class SkyrimActorEntity extends LivingEntity {
 	private boolean hitThisTick;
 	// The player behind this tick's hit, if one was (multiplayer: whose hit it is).
 	private @Nullable ServerPlayer pendingAttacker;
+	// The Minecraft mob behind this tick's hit, if a mob landed it (its entity id; 0: none).
+	private int pendingMob;
 
 	public SkyrimActorEntity(EntityType<? extends SkyrimActorEntity> type, Level level) {
 		super(type, level);
@@ -101,6 +103,8 @@ public class SkyrimActorEntity extends LivingEntity {
 		this.pendingWeapon = weaponClass(source);
 		if (source.getEntity() instanceof ServerPlayer player) {
 			this.pendingAttacker = player;
+		} else if (source.getEntity() instanceof net.minecraft.world.entity.Mob mob) {
+			this.pendingMob = mob.getId();
 		}
 		if (source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)) {
 			this.pendingFlags |= Proto.HIT_FIRE;
@@ -174,6 +178,13 @@ public class SkyrimActorEntity extends LivingEntity {
 		ServerPlayer attacker = this.pendingAttacker;
 		this.pendingAttacker = null;
 		return attacker;
+	}
+
+	/** The mob (entity id) whose hit {@link #takeHit} just returned, or 0; clears it. */
+	public int takeMobAttacker() {
+		int mob = this.pendingMob;
+		this.pendingMob = 0;
+		return mob;
 	}
 
 	@Override

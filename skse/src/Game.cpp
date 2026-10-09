@@ -659,6 +659,7 @@ namespace skycraft
 			st.mcGuiScale = haveMc ? static_cast<int>(mc.guiScale) : 0;
 			Input::SetActivatePromptKey(puppet);
 			Combat::PerFrame(a_player, puppet, a_delta);
+			MobFoes::PerFrame(a_player, puppet, a_delta);
 			Quests::PerFrame(loading, a_delta);
 			WorldRender::UpdateRagdoll(a_player, haveMc && st.mcInWorld);
 			if (puppet) {
@@ -1291,6 +1292,7 @@ namespace skycraft
 
 			Collision::Get().Start();
 			Combat::Install();
+			MobFoes::Install();
 			logger::info("game hooks installed");
 		}
 
@@ -1306,6 +1308,7 @@ namespace skycraft
 			haveLastSet = false;
 			State().lookInitialized = false;
 			Quests::OnGameLoaded();
+			MobFoes::OnGameLoaded();
 		}
 	}
 }

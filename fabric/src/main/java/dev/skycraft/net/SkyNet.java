@@ -140,7 +140,19 @@ public final class SkyNet {
 		}
 	}
 
+	/** Server -> guest: the guest used the Fus Ro Dah sword, so their Skyrim shouts (Proto.EV_SHOUT). */
+	public record Shout(int words) implements CustomPacketPayload {
+		public static final Type<Shout> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SkyCraft.MOD_ID, "shout"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, Shout> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, Shout::words, Shout::new);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
 	public static void init() {
+		PayloadTypeRegistry.clientboundPlay().register(Shout.TYPE, Shout.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(QuestDone.TYPE, QuestDone.CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(QuestDone.TYPE, (payload, context) -> {
 			ServerPlayer player = context.player();

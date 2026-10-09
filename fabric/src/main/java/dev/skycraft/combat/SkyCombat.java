@@ -90,9 +90,16 @@ public final class SkyCombat {
 		for (SkyrimActorEntity proxy : PROXIES.values()) {
 			float[] hit = proxy.takeHit();
 			ServerPlayer attacker = proxy.takeAttacker();
+			int mob = proxy.takeMobAttacker();
 			if (hit != null && (hit[0] > 0.0F || hit[3] > 0.0F)) {
 				int flags = Float.floatToRawIntBits(hit[4]);
 				int weapon = Float.floatToRawIntBits(hit[5]);
+				if (attacker == null && mob != 0) {
+					// A zombie, skeleton, ...: the actor takes it and fights that mob's stand-in back.
+					SkyLink.pushEvent(Proto.EV_MOB_HIT_ACTOR, proxy.formId(), hit[0], hit[1], hit[2], hit[3], flags | Proto.HIT_MOB, mob);
+					shareHit(players, proxy, hit, flags | Proto.HIT_MOB, weapon, null);
+					continue;
+				}
 				// The host's Skyrim takes every hit; a guest's hit doesn't train the host's skills.
 				boolean byGuest = attacker != null && !SkyNet.isHost(attacker);
 				SkyLink.pushEvent(Proto.EV_HIT_ACTOR, proxy.formId(), hit[0], hit[1], hit[2], hit[3], byGuest ? flags | Proto.HIT_REMOTE : flags, weapon);

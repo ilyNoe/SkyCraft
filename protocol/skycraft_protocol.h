@@ -13,7 +13,7 @@
 namespace skycraft::proto
 {
 	inline constexpr std::uint32_t kMagic = 0x43594B53;  // "SKYC"
-	inline constexpr std::uint32_t kVersion = 13;
+	inline constexpr std::uint32_t kVersion = 14;
 	inline constexpr wchar_t       kMappingName[] = L"Local\\SkyCraft_v1";
 
 	// 1 Minecraft block == 70 Skyrim units (Skyrim player ~128 units tall, MC player 1.8 blocks).
@@ -35,6 +35,7 @@ namespace skycraft::proto
 	inline constexpr std::uint64_t kOverlaySlotBytes = std::uint64_t(kMaxOverlayW) * kMaxOverlayH * 4;
 	inline constexpr std::uint32_t kOverlaySlots = 3;
 	inline constexpr std::uint64_t kOffActorTable = 0x12000;   // Skyrim -> MC, see ActorTable
+	inline constexpr std::uint64_t kOffMobTable = 0x16200;     // MC -> Skyrim, see MobTable
 	inline constexpr std::uint64_t kOffEventRing = 0x17000;    // MC -> Skyrim, see McEvent
 	inline constexpr std::uint64_t kOffWorldEntities = 0x1C000;  // MC -> Skyrim, see WorldEntities
 	inline constexpr std::uint64_t kOffRenderRing = kOffOverlayPixels + kOverlaySlotBytes * kOverlaySlots;
@@ -181,6 +182,8 @@ namespace skycraft::proto
 		kInHurt = 7,         // Skyrim hit the player: code = HurtKind, a = Skyrim damage * 100, b = attacker FormID, c = HurtFlags
 		kInOpenMenu = 8,     // open Minecraft's pause/options menu
 		kInQuestDone = 9,    // a Daedric quest was just completed: code = which (0 Azura ... 14 Vaermina, see Quests.cpp)
+		kInMobHurt = 10,     // a Skyrim actor hit a Minecraft mob's stand-in: a = Skyrim damage * 100, b = attacker FormID,
+		                     // c = the mob's Minecraft entity id (MobRecord::entityId)
 	};
 
 	enum HurtKind : std::uint16_t
@@ -232,6 +235,32 @@ namespace skycraft::proto
 		ActorRecord   actors[kMaxActors];
 	};
 	static_assert(sizeof(ActorTable) == 0x40 + 64 * kMaxActors);
+	static_assert(kOffActorTable + sizeof(ActorTable) <= kOffMobTable);
+
+	// ---- mob table @0x16200 (MC -> Skyrim, seqlock) -------------------------------------------
+	// Hostile Minecraft mobs near the player. Skyrim gives each one an invisible stand-in actor that
+	// its NPCs can see, fight and hit; their hits come back as kInMobHurt.
+	inline constexpr std::uint32_t kMaxMobs = 48;
+
+	struct MobRecord
+	{
+		std::uint32_t entityId;      // Minecraft entity id (stable while the mob exists)
+		std::uint32_t targetFormId;  // the Skyrim actor it is going for (0: none, or a player)
+		float         x, y, z;       // feet, MC coords
+		float         width, height; // blocks
+		float         healthFrac;    // 0..1
+	};
+	static_assert(sizeof(MobRecord) == 32);
+
+	struct MobTable
+	{
+		std::uint32_t seq;
+		std::uint32_t count;
+		std::uint8_t  pad[0x40 - 8];
+		MobRecord     mobs[kMaxMobs];
+	};
+	static_assert(sizeof(MobTable) == 0x40 + 32 * kMaxMobs);
+	static_assert(kOffMobTable + sizeof(MobTable) <= kOffEventRing);
 
 	// ---- event ring @0x17000 (MC -> Skyrim) ---------------------------------------------------
 	inline constexpr std::uint32_t kEventRingEntries = 512;  // power of two
@@ -250,6 +279,9 @@ namespace skycraft::proto
 		                    // 10 Smithing, 11 Heavy Armor, 12 Light Armor), a = uses (as Skyrim's AdvanceSkill counts them)
 		kEvPuppetActor = 6, // multiplayer guest: where the host's Skyrim has this actor: formId, a/b/c = feet (MC coords),
 		                    // d = yaw (MC degrees), flags = ActorFlags. This Skyrim's copy of the actor is drawn there.
+		kEvMobHitActor = 7, // a Minecraft mob hit a Skyrim actor: like kEvHitActor (flags has kHitMob), but weapon = the
+		                    // mob's Minecraft entity id (MobRecord::entityId): the actor fights that mob's stand-in back
+		kEvShout = 8,       // the player shouted (the Fus Ro Dah sword): a = words (1-3) of Unrelenting Force
 	};
 
 	enum HitFlags : std::uint32_t
@@ -259,6 +291,7 @@ namespace skycraft::proto
 		kHitSweep = 1u << 2,
 		kHitFire = 1u << 3,
 		kHitRemote = 1u << 4,  // multiplayer: another player landed it (no skill gain, no crime for this player)
+		kHitMob = 1u << 5,     // a Minecraft mob (zombie, skeleton, ...) landed it, not a player
 	};
 
 	// What landed a kEvHitActor (Skyrim plays that weapon class's impact effect and sounds).

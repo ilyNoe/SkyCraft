@@ -22,6 +22,9 @@ public final class SkyCraft implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		SkyCombat.init();
+		dev.skycraft.combat.SkyMobs.init();
+		dev.skycraft.combat.FusRoDah.init();
+		dev.skycraft.world.SkyMerchant.init();
 		dev.skycraft.net.SkyNet.init();
 		dev.skycraft.world.SkyDig.init();
 		ServerLifecycleEvents.SERVER_STARTED.register(SkyCraft::configureServer);

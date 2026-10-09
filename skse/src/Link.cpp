@@ -101,6 +101,7 @@ namespace skycraft
 		std::memset(base_ + proto::kOffInputRing, 0, proto::kInputRingDataOff);
 		std::memset(base_ + proto::kOffCollisionRing, 0, proto::kColRingDataOff);
 		std::memset(base_ + proto::kOffActorTable, 0, sizeof(proto::ActorTable));
+		std::memset(base_ + proto::kOffMobTable, 0, sizeof(proto::MobTable));
 		std::memset(base_ + proto::kOffEventRing, 0, proto::kEventRingDataOff);
 		std::memset(base_ + proto::kOffWorldEntities, 0, sizeof(proto::WorldEntities));
 		std::memset(base_ + proto::kOffRenderRing, 0, proto::kRenRingDataOff);
@@ -253,6 +254,31 @@ namespace skycraft
 			std::memcpy(table->actors, a_records, sizeof(proto::ActorRecord) * count);
 		}
 		seq.store(s + 2, std::memory_order_release);
+	}
+
+	bool Link::ReadMobs(std::vector<proto::MobRecord>& a_out) const
+	{
+		a_out.clear();
+		if (!base_) {
+			return false;
+		}
+		auto* src = At<proto::MobTable>(proto::kOffMobTable);
+		auto  seq = Atomic(src->seq);
+		for (int attempt = 0; attempt < 16; ++attempt) {
+			const auto s1 = seq.load(std::memory_order_acquire);
+			if (s1 & 1) {
+				_mm_pause();
+				continue;
+			}
+			const auto count = std::min(src->count, proto::kMaxMobs);
+			a_out.assign(src->mobs, src->mobs + count);
+			std::atomic_thread_fence(std::memory_order_acquire);
+			if (seq.load(std::memory_order_relaxed) == s1) {
+				return true;
+			}
+			a_out.clear();
+		}
+		return false;
 	}
 
 	bool Link::PopEvent(proto::McEvent& a_out)

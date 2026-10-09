@@ -125,6 +125,20 @@ namespace skycraft
 		bool PlayerEngaged();
 	}
 
+	namespace MobFoes
+	{
+		void Install();
+		// A save was loaded: forget our stand-ins (any the save kept are removed).
+		void OnGameLoaded();
+		// Main thread, once per frame: an invisible stand-in actor for each hostile Minecraft mob near
+		// the player (Skyrim's NPCs fight those), and their hits on it sent back to Minecraft.
+		void PerFrame(RE::PlayerCharacter* a_player, bool a_puppeting, float a_delta);
+		// One of those stand-ins (not a real NPC: no Minecraft proxy, no hazards, ...).
+		bool IsStandIn(const RE::Actor* a_actor);
+		// The stand-in of Minecraft mob a_entityId, if it has one right now.
+		RE::Actor* StandInFor(std::uint32_t a_entityId);
+	}
+
 	namespace BlockLights
 	{
 		// Render messages (main thread): a section's light-emitting blocks; a world change.

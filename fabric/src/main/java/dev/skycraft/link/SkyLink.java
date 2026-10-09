@@ -551,6 +551,39 @@ public final class SkyLink {
 		INT.setRelease(s, b + WE_SEQ, seq + 2);
 	}
 
+	// ---- mob table (write) -----------------------------------------------------------------
+
+	/** One hostile Minecraft mob for Skyrim to give a stand-in (see MobRecord in the protocol header). */
+	public record Mob(int entityId, int targetFormId, float x, float y, float z, float width, float height, float healthFrac) {
+	}
+
+	/** Seqlock write of the mob table. Server thread only. */
+	public static void writeMobs(java.util.List<Mob> mobs) {
+		MemorySegment s = shm;
+		if (s == null) {
+			return;
+		}
+		long b = OFF_MOB_TABLE;
+		int seq = s.get(JAVA_INT, b + MT_SEQ);
+		INT.setRelease(s, b + MT_SEQ, seq + 1);
+		VarHandle.storeStoreFence();
+		int count = Math.min(mobs.size(), MAX_MOBS);
+		s.set(JAVA_INT, b + MT_COUNT, count);
+		for (int i = 0; i < count; i++) {
+			Mob m = mobs.get(i);
+			long r = b + MT_RECORDS + i * MOB_RECORD_BYTES;
+			s.set(JAVA_INT, r, m.entityId());
+			s.set(JAVA_INT, r + 4, m.targetFormId());
+			s.set(JAVA_FLOAT, r + 8, m.x());
+			s.set(JAVA_FLOAT, r + 12, m.y());
+			s.set(JAVA_FLOAT, r + 16, m.z());
+			s.set(JAVA_FLOAT, r + 20, m.width());
+			s.set(JAVA_FLOAT, r + 24, m.height());
+			s.set(JAVA_FLOAT, r + 28, m.healthFrac());
+		}
+		INT.setRelease(s, b + MT_SEQ, seq + 2);
+	}
+
 	// ---- render ring (produce) -------------------------------------------------------------
 
 	/**

@@ -64,6 +64,15 @@ public final class InputBridge {
 			case Proto.IN_RELEASE_ALL -> releaseAll();
 			case Proto.IN_HURT -> hurt(minecraft, code, a / 100.0F, b, c);
 			case Proto.IN_QUEST_DONE -> questDone(minecraft, code);
+			case Proto.IN_MOB_HURT -> {
+				// Skyrim's NPCs hit a mob's stand-in. Only the host's Skyrim has stand-ins, and the
+				// host's integrated server owns the mobs.
+				var server = minecraft.getSingleplayerServer();
+				if (server != null) {
+					float damage = a / 100.0F;
+					server.execute(() -> dev.skycraft.combat.SkyMobs.hurtByNpc(server, c, damage, b));
+				}
+			}
 			case Proto.IN_OPEN_MENU -> {
 				if (minecraft.gui.screen() == null && minecraft.player != null) {
 					releaseAll();

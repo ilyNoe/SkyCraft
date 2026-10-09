@@ -67,6 +67,12 @@ public final class SkyCraftClient implements ClientModInitializer {
 				dev.skycraft.link.SkyLink.pushEvent(dev.skycraft.link.Proto.EV_PLAYER_DIED, payload.attackerFormId(), 0, 0, 0, 0, 0);
 			}
 		});
+		// A guest in a friend's world used the Fus Ro Dah sword: this player's own Skyrim shouts.
+		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(dev.skycraft.net.SkyNet.Shout.TYPE, (payload, context) -> {
+			if (dev.skycraft.link.SkyLink.active()) {
+				dev.skycraft.link.SkyLink.pushEvent(dev.skycraft.link.Proto.EV_SHOUT, 0, payload.words(), 0, 0, 0, 0);
+			}
+		});
 		// A guest in a friend's world: hits on the host's Skyrim actors land on this Skyrim's copies too,
 		// and those copies stand where the host's Skyrim has them.
 		net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(dev.skycraft.net.SkyNet.ActorHit.TYPE, (payload, context) -> {

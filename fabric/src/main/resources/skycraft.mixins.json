@@ -13,6 +13,7 @@
     "FlowingFluidMixin",
     "ItemMixin",
     "MinecraftServerFlightMixin",
+    "MobAccessor",
     "PlayerEdgeMixin",
     "PressurePlateMixin",
     "ProjectileMixin",
