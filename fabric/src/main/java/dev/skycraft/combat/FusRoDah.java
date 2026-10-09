@@ -14,7 +14,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -50,7 +49,7 @@ public final class FusRoDah {
 				return InteractionResult.FAIL;
 			}
 			if (player instanceof ServerPlayer serverPlayer) {
-				shout(serverPlayer, stack, hand);
+				shout(serverPlayer, stack);
 			}
 			return InteractionResult.SUCCESS;
 		});
@@ -78,10 +77,9 @@ public final class FusRoDah {
 		return data != null && data.copyTag().contains(TAG);
 	}
 
-	private static void shout(ServerPlayer player, ItemStack stack, InteractionHand hand) {
+	private static void shout(ServerPlayer player, ItemStack stack) {
 		ServerLevel level = player.level();
 		player.getCooldowns().addCooldown(stack, COOLDOWN_TICKS);
-		player.swing(hand, true);
 
 		// Skyrim: the player's own Skyrim shouts (host through shared memory, a guest through the server).
 		if (SkyNet.isHost(player)) {
@@ -105,10 +103,11 @@ public final class FusRoDah {
 				continue;
 			}
 			double strength = 3.0 * (1.0 - dist / (RANGE * 1.25));
-			target.hurtServer(level, level.damageSources().playerAttack(player), 2.0F);
-			target.knockback(strength, -look.x, -look.z);
+			var source = level.damageSources().playerAttack(player);
+			target.knockback(strength, -look.x, -look.z, source, 2.0F);
 			target.push(0.0, 0.35 + 0.25 * strength / 3.0, 0.0);
-			target.hurtMarked = true;
+			// Hurting it last also sends the new motion to clients (players included).
+			target.hurtServer(level, source, 2.0F);
 			blown++;
 		}
 		SkyCraft.LOG.info("SkyCraft: {} shouted Fus Ro Dah ({} Minecraft mobs/players blown away)", player.getName().getString(), blown);

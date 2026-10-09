@@ -10,13 +10,12 @@ import java.util.EnumSet;
 import java.util.List;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.NeutralMob;
@@ -148,6 +147,12 @@ public final class SkyMobs {
 
 	// ---- AI ------------------------------------------------------------------------------------
 
+	/** Is {@code mob} a minecraft:{@code path}? */
+	private static boolean isType(Mob mob, String path) {
+		var key = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
+		return key != null && key.getNamespace().equals("minecraft") && key.getPath().equals(path);
+	}
+
 	private static @Nullable SkyrimActorEntity nearestNpc(Mob mob, double range) {
 		SkyrimActorEntity best = null;
 		double bestDist = range * range;
@@ -237,11 +242,11 @@ public final class SkyMobs {
 		}
 
 		private boolean creeper() {
-			return this.mob.getType() == EntityType.CREEPER;
+			return isType(this.mob, "creeper");
 		}
 
 		private boolean ranged() {
-			return this.mob.getMainHandItem().getItem() instanceof ProjectileWeaponItem || this.mob.getType() == EntityType.WITCH;
+			return this.mob.getMainHandItem().getItem() instanceof ProjectileWeaponItem || isType(this.mob, "witch");
 		}
 
 		private boolean touching(SkyrimActorEntity npc) {
@@ -291,7 +296,6 @@ public final class SkyMobs {
 			if (this.touching(npc)) {
 				this.mob.getNavigation().stop();
 				if (this.attackCooldown <= 0 && !this.creeper() && this.mob.level() instanceof ServerLevel level) {
-					this.mob.swing(InteractionHand.MAIN_HAND);
 					this.mob.doHurtTarget(level, npc);
 					this.attackCooldown = 20;
 				}

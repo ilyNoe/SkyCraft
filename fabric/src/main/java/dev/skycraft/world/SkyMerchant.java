@@ -7,9 +7,11 @@ import dev.skycraft.combat.FusRoDah;
 import java.util.List;
 import java.util.Optional;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -40,6 +42,8 @@ public final class SkyMerchant {
 	}
 
 	public static void init() {
+		// Nothing hurts the merchant (zombies go for traders, arrows go astray, ...).
+		ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> !entity.entityTags().contains(TAG));
 		CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) -> {
 			register(dispatcher, "marchand", "retirer");
 			register(dispatcher, "merchant", "remove");
@@ -55,7 +59,8 @@ public final class SkyMerchant {
 
 	private static int spawn(ServerPlayer player) {
 		ServerLevel level = player.level();
-		Entity entity = EntityType.WANDERING_TRADER.create(level, EntitySpawnReason.COMMAND);
+		EntityType<?> type = wanderingTrader();
+		Entity entity = type != null ? type.create(level, EntitySpawnReason.COMMAND) : null;
 		if (!(entity instanceof Mob trader) || !(entity instanceof Merchant merchant)) {
 			player.sendSystemMessage(Component.literal("Impossible de faire apparaître le marchand.").withStyle(ChatFormatting.RED));
 			return 0;
@@ -69,7 +74,6 @@ public final class SkyMerchant {
 		trader.setYHeadRot(yaw);
 		trader.setYBodyRot(yaw);
 		trader.setNoAi(true);
-		trader.setInvulnerable(true);
 		trader.setPersistenceRequired();
 		trader.setCustomName(Component.literal("Marchand").withStyle(ChatFormatting.GOLD));
 		trader.setCustomNameVisible(true);
@@ -82,6 +86,16 @@ public final class SkyMerchant {
 		player.sendSystemMessage(Component.literal("Un marchand est apparu. Clic droit dessus pour commercer.").withStyle(ChatFormatting.GOLD));
 		SkyCraft.LOG.info("SkyCraft: {} summoned a merchant at {}", player.getName().getString(), trader.blockPosition());
 		return 1;
+	}
+
+	private static EntityType<?> wanderingTrader() {
+		for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+			var key = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+			if (key != null && key.getNamespace().equals("minecraft") && key.getPath().equals("wandering_trader")) {
+				return type;
+			}
+		}
+		return null;
 	}
 
 	private static int remove(ServerPlayer player) {
