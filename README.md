@@ -42,7 +42,9 @@ shared memory. Minecraft runs hidden in the background, and Skyrim draws everyth
   never blamed on you. Undead don't burn in daylight (there's no Minecraft shade under Skyrim's sky).
 - **The merchant:** `/marchand` (or `/merchant`) puts a Minecraft merchant in front of you. He
   never moves, can't be hurt and never runs out. He sells the **Fus Ro Dah sword** and mob spawn
-  eggs for emeralds (dig them out of Skyrim's rock), and buys raw iron, raw gold and diamonds.
+  eggs for emeralds, and buys raw iron, raw gold and diamonds. Every completed Skyrim quest pays
+  emeralds: 1 for a favour, 2 for a side quest, 3 for guild, Daedric and civil war quests, 5 for
+  the main story and the DLCs. Emerald ore in Skyrim's rock gives some too.
   `/marchand retirer` (`/merchant remove`) removes merchants within 8 blocks.
 - **The Fus Ro Dah sword:** a netherite sword that shouts. Right click and your Skyrim character
   shouts Unrelenting Force: Skyrim's own shockwave throws the NPCs in front of you, and Minecraft
