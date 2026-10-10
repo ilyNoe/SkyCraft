@@ -97,6 +97,24 @@ public final class SkyRewards {
 		SkyCraft.LOG.info("SkyCraft: {} completed {}'s quest; reward chest at {}", player.getName().getString(), PRINCES[quest], pos);
 	}
 
+	/**
+	 * Server thread: {@code player}'s Skyrim completed a quest worth {@code emeralds} (1 for a
+	 * favour, 2 a side quest, 3 a guild, Daedric or civil war quest, 5 the main story and the DLCs):
+	 * straight into their inventory, or at their feet if it's full.
+	 */
+	public static void questEmeralds(ServerPlayer player, int emeralds) {
+		int count = Math.clamp(emeralds, 0, 10);
+		if (count == 0) {
+			return;
+		}
+		ItemStack stack = new ItemStack(Items.EMERALD, count);
+		if (!player.getInventory().add(stack) && !stack.isEmpty()) {
+			player.spawnAtLocation(player.level(), stack);
+		}
+		player.sendSystemMessage(Component.literal("Quête terminée : +" + count + (count > 1 ? " émeraudes" : " émeraude")).withStyle(ChatFormatting.GREEN));
+		SkyCraft.LOG.info("SkyCraft: {} completed a quest; {} emeralds", player.getName().getString(), count);
+	}
+
 	/** In front of the player if there's room, else beside or behind them, else where they stand. */
 	private static BlockPos chestSpot(ServerLevel level, ServerPlayer player) {
 		BlockPos feet = player.blockPosition();

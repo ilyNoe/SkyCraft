@@ -151,7 +151,23 @@ public final class SkyNet {
 		}
 	}
 
+	/** Guest -> server: the guest's Skyrim completed a quest worth this many emeralds (Proto.IN_QUEST_EMERALDS). */
+	public record QuestEmeralds(int emeralds) implements CustomPacketPayload {
+		public static final Type<QuestEmeralds> TYPE = new Type<>(Identifier.fromNamespaceAndPath(SkyCraft.MOD_ID, "quest_emeralds"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, QuestEmeralds> CODEC = StreamCodec.composite(ByteBufCodecs.VAR_INT, QuestEmeralds::emeralds, QuestEmeralds::new);
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
 	public static void init() {
+		PayloadTypeRegistry.serverboundPlay().register(QuestEmeralds.TYPE, QuestEmeralds.CODEC);
+		ServerPlayNetworking.registerGlobalReceiver(QuestEmeralds.TYPE, (payload, context) -> {
+			ServerPlayer player = context.player();
+			context.server().execute(() -> dev.skycraft.world.SkyRewards.questEmeralds(player, payload.emeralds()));
+		});
 		PayloadTypeRegistry.clientboundPlay().register(Shout.TYPE, Shout.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(QuestDone.TYPE, QuestDone.CODEC);
 		ServerPlayNetworking.registerGlobalReceiver(QuestDone.TYPE, (payload, context) -> {

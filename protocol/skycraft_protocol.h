@@ -184,6 +184,7 @@ namespace skycraft::proto
 		kInQuestDone = 9,    // a Daedric quest was just completed: code = which (0 Azura ... 14 Vaermina, see Quests.cpp)
 		kInMobHurt = 10,     // a Skyrim actor hit a Minecraft mob's stand-in: a = Skyrim damage * 100, b = attacker FormID,
 		                     // c = the mob's Minecraft entity id (MobRecord::entityId)
+		kInQuestEmeralds = 11,  // a quest was just completed: code = emeralds it pays, a = the quest's FormID
 	};
 
 	enum HurtKind : std::uint16_t

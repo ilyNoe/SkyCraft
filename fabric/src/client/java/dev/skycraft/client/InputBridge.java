@@ -64,6 +64,7 @@ public final class InputBridge {
 			case Proto.IN_RELEASE_ALL -> releaseAll();
 			case Proto.IN_HURT -> hurt(minecraft, code, a / 100.0F, b, c);
 			case Proto.IN_QUEST_DONE -> questDone(minecraft, code);
+			case Proto.IN_QUEST_EMERALDS -> questEmeralds(minecraft, code);
 			case Proto.IN_MOB_HURT -> {
 				// Skyrim's NPCs hit a mob's stand-in. Only the host's Skyrim has stand-ins, and the
 				// host's integrated server owns the mobs.
@@ -123,6 +124,27 @@ public final class InputBridge {
 			ServerPlayer player = server.getPlayerList().getPlayer(uuid);
 			if (player != null) {
 				dev.skycraft.world.SkyRewards.questDone(player, quest);
+			}
+		});
+	}
+
+	/** This player's Skyrim completed a quest: the world's server pays them its emeralds. */
+	static void questEmeralds(Minecraft minecraft, int emeralds) {
+		var server = minecraft.getSingleplayerServer();
+		if (minecraft.player == null) {
+			return;
+		}
+		if (server == null) {
+			if (net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(dev.skycraft.net.SkyNet.QuestEmeralds.TYPE)) {
+				net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(new dev.skycraft.net.SkyNet.QuestEmeralds(emeralds));
+			}
+			return;
+		}
+		var uuid = minecraft.player.getUUID();
+		server.execute(() -> {
+			ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+			if (player != null) {
+				dev.skycraft.world.SkyRewards.questEmeralds(player, emeralds);
 			}
 		});
 	}

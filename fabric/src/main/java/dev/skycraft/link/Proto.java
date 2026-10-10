@@ -42,6 +42,7 @@ public final class Proto {
 	public static final int IN_OPEN_MENU = 8;
 	public static final int IN_QUEST_DONE = 9;
 	public static final int IN_MOB_HURT = 10;
+	public static final int IN_QUEST_EMERALDS = 11;
 	public static final int HURT_MELEE = 0;
 	public static final int HURT_PROJECTILE = 1;
 	public static final int HURT_MAGIC = 2;
