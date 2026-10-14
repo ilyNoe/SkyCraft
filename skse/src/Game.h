@@ -13,6 +13,9 @@ namespace skycraft
 		// The same, or waiting for Minecraft to arrive after a teleport: Skyrim's own controls
 		// don't move its player either way (it would wander off from where Minecraft is going).
 		std::atomic<bool> minecraftOwnsPlayer{ false };
+		// The player pressed F10: Skyrim keeps its player (plain Skyrim) while Minecraft waits in the
+		// background, until F10 again.
+		std::atomic<bool> skyrimByChoice{ false };
 		// A Minecraft GUI screen (inventory, chat, ...) is open: mouse moves MC's cursor.
 		std::atomic<bool> mcScreenOpen{ false };
 		// A Skyrim menu (journal, dialogue, console, loading, ...) owns input.

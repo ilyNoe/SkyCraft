@@ -43,6 +43,20 @@ namespace skycraft
 		constexpr std::uint32_t kDikM = 0x32;        // Skyrim map
 		constexpr std::uint32_t kDikO = 0x18;        // Minecraft pause / options menu (Esc is Skyrim's)
 		constexpr std::uint32_t kDikF9 = 0x43;       // Skyrim quickload
+		constexpr std::uint32_t kDikF10 = 0x44;      // switch between Minecraft and plain Skyrim (Minecraft keeps running)
+
+		// F10: Skyrim takes its player back (or hands it to Minecraft again). Minecraft keeps running;
+		// when it gets the player back it picks up wherever Skyrim left them.
+		void ToggleSkyrimControl()
+		{
+			auto&      st = State();
+			const bool skyrim = !st.skyrimByChoice;
+			st.skyrimByChoice = skyrim;
+			Input::ReleaseAll();
+			logger::info("F10: {}", skyrim ? "Skyrim takes the player (Minecraft waits)" : "Minecraft gets the player back");
+			RE::SendHUDMessage::ShowHUDMessage(skyrim ? "SkyCraft : Skyrim reprend la main (F10 pour revenir a Minecraft)"
+			                                          : "SkyCraft : retour a Minecraft");
+		}
 
 		bool IsSkyrimMenuKey(std::uint32_t a_code)
 		{
@@ -157,6 +171,13 @@ namespace skycraft
 							auto* button = e->AsButtonEvent();
 							const bool down = button->IsDown();
 							const bool up = button->IsUp();
+							// F10 works either way round: from Minecraft and from plain Skyrim.
+							if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == kDikF10 && !menuOpen && !st.mcScreenOpen) {
+								if (down) {
+									ToggleSkyrimControl();
+								}
+								break;
+							}
 							if (!route || (!down && !up)) {
 								break;
 							}
