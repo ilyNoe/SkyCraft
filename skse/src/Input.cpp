@@ -1,5 +1,8 @@
 #include "Game.h"
 
+#include <SimpleIni.h>
+#include <cstdlib>
+
 namespace skycraft
 {
 	namespace
@@ -44,8 +47,28 @@ namespace skycraft
 		constexpr std::uint32_t kDikO = 0x18;        // Minecraft pause / options menu (Esc is Skyrim's)
 		constexpr std::uint32_t kDikF9 = 0x43;       // Skyrim quickload
 		constexpr std::uint32_t kDikF10 = 0x44;      // switch between Minecraft and plain Skyrim (Minecraft keeps running)
+		constexpr std::uint32_t kDikP = 0x19;        // the same, for keyboards without F keys (SkyCraft.ini can change it)
 
-		// F10: Skyrim takes its player back (or hands it to Minecraft again). Minecraft keeps running;
+		// The key that switches between Minecraft and plain Skyrim: SkyCraft.ini [Controls]
+		// iSkyrimToggleKey (a DirectInput scan code, e.g. 0x19 = P), else P. F10 always works too.
+		std::uint32_t ToggleKey()
+		{
+			static const std::uint32_t key = [] {
+				CSimpleIniA ini;
+				ini.SetUnicode();
+				ini.LoadFile("Data/SKSE/Plugins/SkyCraft.ini");
+				const char*   text = ini.GetValue("Controls", "iSkyrimToggleKey", "");
+				std::uint32_t code = text && *text ? static_cast<std::uint32_t>(std::strtoul(text, nullptr, 0)) : kDikP;
+				if (code == 0 || code > 0xFF) {
+					code = kDikP;
+				}
+				logger::info("switch between Minecraft and Skyrim: key {:#04x} (and F10)", code);
+				return code;
+			}();
+			return key;
+		}
+
+		// P (or F10): Skyrim takes its player back (or hands it to Minecraft again). Minecraft keeps running;
 		// when it gets the player back it picks up wherever Skyrim left them.
 		void ToggleSkyrimControl()
 		{
@@ -53,8 +76,8 @@ namespace skycraft
 			const bool skyrim = !st.skyrimByChoice;
 			st.skyrimByChoice = skyrim;
 			Input::ReleaseAll();
-			logger::info("F10: {}", skyrim ? "Skyrim takes the player (Minecraft waits)" : "Minecraft gets the player back");
-			RE::SendHUDMessage::ShowHUDMessage(skyrim ? "SkyCraft : Skyrim reprend la main (F10 pour revenir a Minecraft)"
+			logger::info("switch key: {}", skyrim ? "Skyrim takes the player (Minecraft waits)" : "Minecraft gets the player back");
+			RE::SendHUDMessage::ShowHUDMessage(skyrim ? "SkyCraft : Skyrim reprend la main (P pour revenir a Minecraft)"
 			                                          : "SkyCraft : retour a Minecraft");
 		}
 
@@ -172,7 +195,8 @@ namespace skycraft
 							const bool down = button->IsDown();
 							const bool up = button->IsUp();
 							// F10 works either way round: from Minecraft and from plain Skyrim.
-							if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && button->GetIDCode() == kDikF10 && !menuOpen && !st.mcScreenOpen) {
+							if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && (button->GetIDCode() == kDikF10 || button->GetIDCode() == ToggleKey()) && !menuOpen &&
+								!st.mcScreenOpen) {
 								if (down) {
 									ToggleSkyrimControl();
 								}

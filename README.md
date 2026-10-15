@@ -151,7 +151,7 @@ Minecraft has priority. These keys still go to Skyrim:
 | **F9** | Skyrim quickload (save from the Esc menu) |
 | **~** | Skyrim console |
 | **O** | Minecraft pause / options menu |
-| **F10** | Switch to plain Skyrim (Minecraft keeps running in the background), and back |
+| **P** (or F10) | Switch to plain Skyrim (Minecraft keeps running in the background), and back. `SkyCraft.ini` `[Controls] iSkyrimToggleKey` changes it |
 
 Every other key is Minecraft's: **E** inventory, **F5** camera, **T** chat, **/** commands,
 **Shift** crouch/sneak, and so on.
@@ -174,7 +174,7 @@ Every other key is Minecraft's: **E** inventory, **F5** camera, **T** chat, **/*
   [Alternate Start](https://www.nexusmods.com/skyrimspecialedition/mods/272) or a save made after Helgen.
 - Skyrim's inventory, magic, shouts and perks can't be opened while Minecraft drives the player.
 - Minecraft hits only reach NPCs, not Skyrim objects such as the web around Arvel in Bleak Falls
-  Barrow. Press **F10** to play plain Skyrim for a moment (deal with the object), then F10 again:
+  Barrow. Press **P** to play plain Skyrim for a moment (deal with the object), then P again:
   Minecraft picks up wherever Skyrim left you. Your Minecraft blocks aren't drawn meanwhile.
 - Sign text isn't drawn yet.
 - All Skyrim interiors share one Minecraft world, so blocks placed in one interior can appear in
